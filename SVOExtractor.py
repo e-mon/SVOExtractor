@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 class Extractor():
-    def __init__(self, coref, sentences):
+    def __init__(self, coref = None, sentences = None):
         self.coref = coref
         self.sentences = sentences
         self.dependencies = self.sentences['dependencies']
@@ -80,9 +80,13 @@ class Extractor():
             ret = ' '.join([subject,predicate[0],predicate[1]])
         return ret
 
-    def extract_svo(self):
-        sentences = self.sentences
-        dependencies = self.dependencies
+    def extract_svo(self, sentences = None, dependencies = None):
+        if sentences is None:
+            if self.sentences is None:
+                return []
+            else:
+                sentences = self.sentences
+                dependencies = self.dependencies
 
         #1. extract Named Entity
         NNPs = {word[0] : word[1]['NamedEntityTag'] for word in sentences['words'] if word[1]['PartOfSpeech'] == 'NNP'}
