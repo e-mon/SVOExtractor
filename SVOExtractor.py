@@ -2,10 +2,11 @@
 # -*- coding: utf-8 -*-
 
 class Extractor():
-    def __init__(self, coref = None, sentences = None):
-        self.coref = coref
-        self.sentences = sentences
-        self.dependencies = self.sentences['dependencies']
+    def __init__(self, coref = None, sentence = None):
+        if sentence is not None:
+            self.coref = coref
+            self.sentence = sentence
+            self.dependencies = self.sentence['dependencies']
 
     def concat_noun(self, noun, dependencies):
         if noun is None:
@@ -20,12 +21,14 @@ class Extractor():
                     nn.append(dep)
                 elif dependency == 'poss':
                     poss = dep
+                elif dependency == 'prep':
+                    prep = self.concat_prep(prep, dependencies)
                 # collapsed 対応
                 elif 'prep' in dependency:
                     if prep is not None:
-                        prep += dependency.lstrip('prep') + ' ' + dep
+                        prep += dependency.lstrip('prep_') + ' ' + dep.decode('utf-8')
                     else:
-                        prep = dependency.lstrip('prep') + ' ' + dep
+                        prep = dependency.lstrip('prep_') + ' '  + dep.decode('utf-8')
 
         if nn != []:
             ret = ' '.join(nn) + ' ' + ret
@@ -34,11 +37,11 @@ class Extractor():
             ret = poss + '\'s ' + ret
 
         if prep is not None:
-            ret = ret + ' ' + prep
+            ret = ret.decode('utf-8') + ' ' + prep
 
         return ret
 
-    #collapledではないdependency抽出の場合
+    #collapsedではないdependency抽出の場合
     def concat_prep(self, prep, dependencies):
         for dependency,gov,dep in dependencies:
             # May be it is neccesary to focus on specific cc as either 'or' or 'to'
@@ -55,7 +58,10 @@ class Extractor():
                 if dependency == 'dobj':
                     return (gov,self.concat_noun(dep, dependencies))
                 elif dependency == 'ccomp':
-                    return (gov,self.extract_sentence(dep,dependencies))
+                    if gov == dep:
+                        return (gov, self.concat_noun(dep, dependencies))
+                    else:
+                        return (gov,self.extract_sentence(dep,dependencies))
                 elif dependency == 'acomp':
                     return (gov,self.concat_noun(dep,dependencies))
         else:
@@ -80,39 +86,46 @@ class Extractor():
             ret = ' '.join([subject,predicate[0],predicate[1]])
         return ret
 
-    def extract_svo(self, sentences = None, dependencies = None):
-        if sentences is None:
-            if self.sentences is None:
+    def extract_svo(self, sentence = None, dependencies = None, coref = None):
+        if sentence is None:
+            if self.sentence is None:
                 return []
             else:
-                sentences = self.sentences
+                sentence = self.sentence
                 dependencies = self.dependencies
+        coref = dict() if coref is None else coref
 
         #1. extract Named Entity
-        NNPs = {word[0] : word[1]['NamedEntityTag'] for word in sentences['words'] if word[1]['PartOfSpeech'] == 'NNP'}
+        NNPs = {word[0] : word[1]['NamedEntityTag'] for word in sentence['words'] if word[1]['PartOfSpeech'] == 'NNP'}
 
         #2. subject and verb pare
-        subjects = [(gov,dep) for dependency,gov,dep in dependencies if dependency in ['nsubj','csubj'] and dep in NNPs]
+        subjects = [(gov,dep) for dependency,gov,dep in dependencies if dependency in ['nsubj','csubj'] and (dep in NNPs or dep in coref)]
 
-        #3. objects
+        # 3. objects
         # FIXME : terrible implement
         objects = [self.extract_predicate(gov, dependencies) for dependency,gov,dep in dependencies if dependency in ['dobj','ccomp','acomp']]
         idobjs = [(gov,dep) for dependency,gov,dep in dependencies if dependency == 'idobjs']
         if idobjs != []:
             objects = [(gov,dep + ' ' + idobj) for idobj in idobjs  for dependency,gov,dep in dependencies]
 
-        #4. construct triple
+        # 4. construct triple
         svos = []
         for sv,subject in subjects:
+            # complete noun phrase
+            if subject in coref:
+                subject = coref[subject]
+            else:
+                subject = self.concat_noun(subject, dependencies)
             for ov,obj in objects:
                 if sv == ov:
+                    if obj in coref:
+                        obj = coref[obj]
                     svos.append((subject,sv,obj))
                     break
             else:
                 svos.append((subject,sv,None))
 
-        #5.
-        svos = [(self.concat_noun(svo[0], dependencies),svo[1],svo[2]) for svo in svos]
+        # svos = [(self.concat_noun(svo[0], dependencies),svo[1],svo[2]) for svo in svos]
 
         return svos
 
