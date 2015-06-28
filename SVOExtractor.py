@@ -1,7 +1,32 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-class Extractor():
+class SVO():
+    def __init__(self,sbj, verb, obj, text):
+        self._sbj  = self.sbj  =  sbj
+        self._verb = self.verb = verb
+        self._obj  = self.obj  = obj
+        self.locations = []
+        self.dates = []
+        self.text  = text
+
+    def heads(self):
+        return self._sbj, self._verb, self._obj
+
+    def properties(self):
+        ret = [self.sbj, self.verb, self.obj]
+        if self.locations != []:
+            ret += [' '.join(self.locations)]
+        else:
+            ret += ['None']
+        if self.dates != []:
+            ret += [' '.join(self.dates)]
+        else:
+            ret += ['None']
+        return ret
+
+class SVOExtractor():
+
     def __init__(self, coref = None, sentence = None):
         if sentence is not None:
             self.coref = coref
@@ -103,7 +128,7 @@ class Extractor():
 
         # 3. objects
         # FIXME : terrible implement
-        objects = [self.extract_predicate(gov, dependencies) for dependency,gov,dep in dependencies if dependency in ['dobj','ccomp','acomp']]
+        objects = [(gov, dep) for dependency,gov,dep in dependencies if dependency in ['dobj','ccomp','acomp']]
         idobjs = [(gov,dep) for dependency,gov,dep in dependencies if dependency == 'idobjs']
         if idobjs != []:
             objects = [(gov,dep + ' ' + idobj) for idobj in idobjs  for dependency,gov,dep in dependencies]
@@ -111,19 +136,23 @@ class Extractor():
         # 4. construct triple
         svos = []
         for sv,subject in subjects:
+            svo = SVO(subject, sv, None, sentence['text'])
             # complete noun phrase
             if subject in coref:
-                subject = coref[subject]
+                svo.sbj = coref[subject]
             else:
-                subject = self.concat_noun(subject, dependencies)
+                svo.sbj = self.concat_noun(subject, dependencies)
             for ov,obj in objects:
                 if sv == ov:
+                    svo._obj = obj
                     if obj in coref:
-                        obj = coref[obj]
-                    svos.append((subject,sv,obj))
+                        svo.obj = coref[obj]
+                    else:
+                        svo.obj = self.extract_predicate(ov, dependencies)[1]
+                    svos.append(svo)
                     break
             else:
-                svos.append((subject,sv,None))
+                svos.append(svo)
 
         # svos = [(self.concat_noun(svo[0], dependencies),svo[1],svo[2]) for svo in svos]
 
